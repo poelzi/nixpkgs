@@ -972,6 +972,13 @@ self: super: {
     sha256 = "0i889zs46wn09d7iqdy99201zaqxb175cfs8jz2zi3mv4ywx3a0l";
   });
 
+  # https://github.com/simonmichael/hledger/issues/852
+  hledger-lib = appendPatch super.hledger-lib (pkgs.fetchpatch {
+    url = "https://github.com/simonmichael/hledger/commit/007b9f8caaf699852511634752a7d7c86f6adc67.patch";
+    sha256 = "1lfp29mi1qyrcr9nfjigbyric0xb9n4ann5w6sr0g5sanr4maqs2";
+    stripLen = 1;
+  });
+
   # Copy hledger man pages from data directory into the proper place. This code
   # should be moved into the cabal2nix generator.
   hledger = overrideCabal super.hledger (drv: {
@@ -1115,4 +1122,14 @@ self: super: {
   # Tests require a browser: https://github.com/ku-fpg/blank-canvas/issues/73
   blank-canvas = dontCheck super.blank-canvas;
   blank-canvas_0_6_2 = dontCheck super.blank-canvas_0_6_2;
+
+  # needed because of testing-feat >=0.4.0.2 && <1.1
+  language-ecmascript = doJailbreak super.language-ecmascript;
+
+  # sexpr is old, broken and has no issue-tracker. Let's fix it the best we can. 
+  sexpr =
+    appendPatch (overrideCabal super.sexpr (drv: {
+      isExecutable = false;
+      libraryHaskellDepends = drv.libraryHaskellDepends ++ [self.QuickCheck];
+    })) ./patches/sexpr-0.2.1.patch;
 }
