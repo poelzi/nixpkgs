@@ -13604,6 +13604,8 @@ in {
 
   texttable = callPackage ../development/python-modules/texttable { };
 
+  tenacity = callPackage ../development/python-modules/tenacity { };
+
   tiros = callPackage ../development/python-modules/tiros { };
 
   tifffile = callPackage ../development/python-modules/tifffile { };
