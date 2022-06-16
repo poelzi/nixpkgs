@@ -32,8 +32,8 @@ in {
       phpPackage = mkOption {
         type = types.package;
         description = "PHP version to use";
-        default = pkgs.php80;
-        defaultText = literalExpression "pkgs.php80";
+        default = pkgs.php74;
+        example = literalExample "pkgs.php74";
       };
 
       phpOptions = mkOption {
