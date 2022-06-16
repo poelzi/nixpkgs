@@ -29,6 +29,22 @@ in {
         defaultText = literalExpression "pkgs.engelsystem";
       };
 
+      phpPackage = mkOption {
+        type = types.package;
+        description = "PHP version to use";
+        default = pkgs.php80;
+        defaultText = literalExpression "pkgs.php80";
+      };
+
+      phpOptions = mkOption {
+        type = types.str;
+        default =  ''
+          [PHP]
+          error_reporting = E_ALL & ~E_NOTICE & ~E_DEPRECATED
+        '';
+        description = "Options for phpfpm instance";
+      };
+
       createDatabase = mkOption {
         type = types.bool;
         default = true;
@@ -105,6 +121,8 @@ in {
 
     services.phpfpm.pools.engelsystem = {
       user = "engelsystem";
+      phpPackage = cfg.phpPackage;
+      phpOptions = cfg.phpOptions;
       settings = {
         "listen.owner" = config.services.nginx.user;
         "pm" = "dynamic";
