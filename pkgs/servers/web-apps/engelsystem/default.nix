@@ -5,13 +5,23 @@ let
     ({ enabled, all }: with all; [ filter mysqlnd mysqli pdo pdo_mysql ]);
 in stdenv.mkDerivation rec {
   pname = "engelsystem";
-  version = "3.1.0";
+  version = "3.2.0";
 
   src = fetchzip {
     url =
-      "https://github.com/engelsystem/engelsystem/releases/download/v3.1.0/engelsystem-v3.1.0.zip";
-    sha256 = "01wra7li7n5kn1l6xkrmw4vlvvyqh089zs43qzn98hj0mw8gw7ai";
+      "https://github.com/engelsystem/engelsystem/archive/refs/tags/v${version}.zip";
+    sha256 = "sha256-+KBczMelg0xzlsHRADzMPdu3WtSh7o1yIy+dT1UoVSU=";
   };
+  # the 0.3.2 release file is garbage, containing only the generated files. Merge the source file as well
+  vendorsrc = fetchzip {
+    url =
+      "https://github.com/engelsystem/engelsystem/releases/download/v${version}/engelsystem-v${version}.zip";
+    sha256 = "sha256-kO5Tm/eVjteMu8DewS0OVQnK78aCT2dTEybW/88sIaM=";
+  };
+
+  postUnpack = ''
+    cp -r -- ${vendorsrc}/vendor source
+  '';
 
   buildInputs = [ phpExt ];
 
