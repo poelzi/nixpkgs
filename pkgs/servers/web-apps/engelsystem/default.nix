@@ -12,7 +12,7 @@ in stdenv.mkDerivation rec {
       "https://github.com/engelsystem/engelsystem/archive/refs/tags/v${version}.zip";
     sha256 = "sha256-+KBczMelg0xzlsHRADzMPdu3WtSh7o1yIy+dT1UoVSU=";
   };
-  # the 0.3.2 release file is garbage, containing only the generated files. Merge the source file as well
+  # the 0.3.2 release file is garbage, containing only the generated files. Merge the source tree builds the complete release.
   vendorsrc = fetchzip {
     url =
       "https://github.com/engelsystem/engelsystem/releases/download/v${version}/engelsystem-v${version}.zip";
@@ -20,7 +20,8 @@ in stdenv.mkDerivation rec {
   };
 
   postUnpack = ''
-    cp -r -- ${vendorsrc}/vendor source
+    cp -r -- ${vendorsrc}/vendor  ${vendorsrc}/resources source
+    cp -r -- ${vendorsrc}/public/assets source/public
   '';
 
   buildInputs = [ phpExt ];
