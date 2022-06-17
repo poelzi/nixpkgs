@@ -1,0 +1,60 @@
+From fe299bc32f59164731bf23af66b5f8393864a090 Mon Sep 17 00:00:00 2001
+From: Joshua Bachmeier <joshua@bachmeier.cc>
+Date: Sat, 30 Apr 2022 23:56:45 +0200
+Subject: [PATCH 1/2] Add error handling to oauth provider response processing
+
+---
+ resources/lang/de_DE/additional.po  | 3 +++
+ resources/lang/en_US/additional.po  | 3 +++
+ src/Controllers/OAuthController.php | 7 +++++++
+ 3 files changed, 13 insertions(+)
+
+diff --git a/resources/lang/de_DE/additional.po b/resources/lang/de_DE/additional.po
+index e9aef296..c92d7da9 100644
+--- a/resources/lang/de_DE/additional.po
++++ b/resources/lang/de_DE/additional.po
+@@ -106,6 +106,9 @@ msgstr "Account nicht gefunden"
+ msgid "oauth.provider-not-found"
+ msgstr "OAuth-Provider nicht gefunden"
+ 
++msgid "oauth.invalid_scope"
++msgstr "OAuth-Provider aktzeptiert gefordertes Scope nicht"
++
+ msgid "settings.profile"
+ msgstr "Profil"
+ 
+diff --git a/resources/lang/en_US/additional.po b/resources/lang/en_US/additional.po
+index 020d0a7e..54ce141a 100644
+--- a/resources/lang/en_US/additional.po
++++ b/resources/lang/en_US/additional.po
+@@ -102,6 +102,9 @@ msgstr "Unable to find account"
+ msgid "oauth.provider-not-found"
+ msgstr "Unable to find OAuth provider"
+ 
++msgid "oauth.invalid_scope"
++msgstr "OAuth-Provider rejected requested scope"
++
+ msgid "settings.profile"
+ msgstr "Profile"
+ 
+diff --git a/src/Controllers/OAuthController.php b/src/Controllers/OAuthController.php
+index 059c50bb..93b6012d 100644
+--- a/src/Controllers/OAuthController.php
++++ b/src/Controllers/OAuthController.php
+@@ -88,6 +88,13 @@ class OAuthController extends BaseController
+         $providerName = $request->getAttribute('provider');
+         $provider = $this->getProvider($providerName);
+ 
++        // Handle OAuth error response according to https://www.rfc-editor.org/rfc/rfc6749#section-4.1.2.1
++        if ($request->has('error')) {
++            $this->log->warning('OAuth Error: ' . $request->get('error_description') ?? $request->get('error'));
++
++            throw new HttpNotFound('oauth.' . $request->get('error'));
++        }
++
+         if (!$request->has('code')) {
+             $authorizationUrl = $provider->getAuthorizationUrl();
+             $this->session->set('oauth2_state', $provider->getState());
+-- 
+2.33.1
+

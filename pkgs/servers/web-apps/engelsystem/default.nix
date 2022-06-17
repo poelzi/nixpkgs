@@ -19,6 +19,12 @@ in stdenv.mkDerivation rec {
     sha256 = "sha256-kO5Tm/eVjteMu8DewS0OVQnK78aCT2dTEybW/88sIaM=";
   };
 
+  patches = [
+    ./0001-Add-error-handling-to-oauth-provider-response-proces.patch
+    ./0002-Add-support-for-oauth-scopes.patch
+    ./0003-Allows-to-enable-registration-through-oauth-provider.patch
+  ];
+
   postUnpack = ''
     cp -r -- ${vendorsrc}/vendor  ${vendorsrc}/resources source
     cp -r -- ${vendorsrc}/public/assets source/public
