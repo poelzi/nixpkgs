@@ -32,8 +32,8 @@ in {
       phpPackage = mkOption {
         type = types.package;
         description = "PHP version to use";
-        default = pkgs.php80;
-        defaultText = literalExpression "pkgs.php80";
+        default = pkgs.php74;
+        defaultText = literalExpression "pkgs.php74";
       };
 
       phpOptions = mkOption {
@@ -192,6 +192,7 @@ in {
     };
     systemd.services."phpfpm-engelsystem".after =
       [ "engelsystem-migrate.service" ];
+    systemd.services."phpfpm-engelsystem".restartTriggers = [cfg.package];
 
     users.users.engelsystem = {
       isSystemUser = true;
