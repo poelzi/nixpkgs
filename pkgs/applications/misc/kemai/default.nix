@@ -3,6 +3,7 @@
 , fetchFromGitHub
 , cmake
 , magic-enum
+, range-v3
 , spdlog
 , qtbase
 , qtconnectivity
@@ -16,13 +17,13 @@
 
 stdenv.mkDerivation rec {
   pname = "kemai";
-  version = "0.9.2";
+  version = "0.10.0";
 
   src = fetchFromGitHub {
     owner = "AlexandrePTJ";
     repo = "kemai";
     rev = version;
-    hash = "sha256-PDjNO2iMPK0J3TSHVZ/DW3W0GkdB8yNZYoTGEd2snac=";
+    hash = "sha256-wclBAgeDyAIw/nGF6lzIwbwdoZMBTu+tjxsnIxIkODM=";
   };
 
   buildInputs = [
@@ -32,10 +33,14 @@ stdenv.mkDerivation rec {
     qtlanguageserver
     libXScrnSaver
     magic-enum
+    range-v3
     spdlog
   ] ++ lib.optional stdenv.hostPlatform.isLinux qtwayland;
-  cmakeFlags = [ "-DUSE_CONAN=OFF" ];
-  patches = [ ./000-cmake-disable-conan.diff ];
+  cmakeFlags = [
+    "-DFETCHCONTENT_FULLY_DISCONNECTED=ON"
+    "-DFETCHCONTENT_QUIET=OFF"
+    "-DFETCHCONTENT_TRY_FIND_PACKAGE_MODE=ALWAYS"
+  ];
 
   nativeBuildInputs = [ cmake wrapQtAppsHook ];
 
