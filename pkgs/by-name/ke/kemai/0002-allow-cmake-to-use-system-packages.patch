@@ -1,0 +1,57 @@
+From e0c4c77c055fb6eb3737468e20a3d129739cba48 Mon Sep 17 00:00:00 2001
+From: Daniel Poelzleithner <poelzleithner@b1-systems.de>
+Date: Wed, 25 Oct 2023 14:28:31 +0200
+Subject: [PATCH 2/2] Allow cmake to use system packages
+
+It is not possible to fetch packages in nix when
+building. Support to use system packages instead
+of pulling with git
+---
+ CMakeLists.txt | 30 +++++++++++++++++++-----------
+ 1 file changed, 19 insertions(+), 11 deletions(-)
+
+diff --git a/CMakeLists.txt b/CMakeLists.txt
+index d5cfe55..2cdd33c 100644
+--- a/CMakeLists.txt
++++ b/CMakeLists.txt
+@@ -9,18 +9,26 @@ list(APPEND CMAKE_PREFIX_PATH ${CMAKE_BINARY_DIR})
+ set(CMAKE_CXX_STANDARD 20)
+ set(CMAKE_CXX_STANDARD_REQUIRED ON)
+ 
++set(FETCH_CONTENT ON CACHE BOOL "Fetch dependencies from git")
++
+ # Add dependencies
+-include(FetchContent)
+-FetchContent_Declare(magic_enum
+-        GIT_REPOSITORY https://github.com/Neargye/magic_enum.git
+-        GIT_TAG v0.9.3)
+-FetchContent_Declare(spdlog
+-        GIT_REPOSITORY https://github.com/gabime/spdlog.git
+-        GIT_TAG v1.12.0)
+-FetchContent_Declare(range-v3
+-        GIT_REPOSITORY https://github.com/ericniebler/range-v3.git
+-        GIT_TAG 0.12.0)
+-FetchContent_MakeAvailable(magic_enum spdlog range-v3)
++if(FETCH_CONTENT)
++    include(FetchContent)
++    FetchContent_Declare(magic_enum
++            GIT_REPOSITORY https://github.com/Neargye/magic_enum.git
++            GIT_TAG v0.9.3)
++    FetchContent_Declare(spdlog
++            GIT_REPOSITORY https://github.com/gabime/spdlog.git
++            GIT_TAG v1.12.0)
++    FetchContent_Declare(range-v3
++            GIT_REPOSITORY https://github.com/ericniebler/range-v3.git
++            GIT_TAG 0.12.0)
++    FetchContent_MakeAvailable(magic_enum spdlog range-v3)
++else ()
++    find_package(magic_enum CONFIG REQUIRED)
++    find_package(spdlog CONFIG REQUIRED)
++    find_package(range-v3 CONFIG REQUIRED)
++endif ()
+ 
+ # Setup Qt
+ set(CMAKE_AUTOMOC ON)
+-- 
+2.40.1
+

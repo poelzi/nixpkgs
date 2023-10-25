@@ -4,39 +4,41 @@
 , cmake
 , magic-enum
 , spdlog
-, qtbase
-, qtconnectivity
-, qttools
-, qtlanguageserver
-, wrapQtAppsHook
+, qt6
+, range-v3
 , libXScrnSaver
 , nix-update-script
 }:
 
 stdenv.mkDerivation rec {
   pname = "kemai";
-  version = "0.9.2";
+  version = "0.10.0";
 
   src = fetchFromGitHub {
     owner = "AlexandrePTJ";
     repo = "kemai";
     rev = version;
-    hash = "sha256-PDjNO2iMPK0J3TSHVZ/DW3W0GkdB8yNZYoTGEd2snac=";
+    hash = "sha256-wclBAgeDyAIw/nGF6lzIwbwdoZMBTu+tjxsnIxIkODM=";
   };
 
   buildInputs = [
-    qtbase
-    qtconnectivity
-    qttools
-    qtlanguageserver
+    qt6.qtbase
+    qt6.qtconnectivity
+    qt6.qttools
+    qt6.qtlanguageserver
     libXScrnSaver
     magic-enum
     spdlog
+    range-v3
   ];
-  cmakeFlags = [ "-DUSE_CONAN=OFF" ];
-  patches = [ ./000-cmake-disable-conan.diff ];
 
-  nativeBuildInputs = [ cmake wrapQtAppsHook ];
+  cmakeFlags = [ "-D FETCH_CONTENT=OFF" ];
+  patches = [
+    ./0001-add-desktop-file-and-fix-install.patch
+    ./0002-allow-cmake-to-use-system-packages.patch
+  ];
+
+  nativeBuildInputs = [ cmake qt6.wrapQtAppsHook ];
 
   passthru = {
     updateScript = nix-update-script { };
