@@ -42,6 +42,8 @@ stdenv.mkDerivation rec {
     "-DFETCHCONTENT_TRY_FIND_PACKAGE_MODE=ALWAYS"
   ];
 
+  patches = [ ./001-add-desktop.patch ];
+
   nativeBuildInputs = [ cmake wrapQtAppsHook ];
 
   passthru = {
