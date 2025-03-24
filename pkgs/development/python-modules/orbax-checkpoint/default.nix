@@ -34,19 +34,23 @@
 
 buildPythonPackage rec {
   pname = "orbax-checkpoint";
-  version = "0.11.6";
+  version = "0.11.9";
   pyproject = true;
 
   src = fetchFromGitHub {
     owner = "google";
     repo = "orbax";
     tag = "v${version}";
-    hash = "sha256-2bnm9D+ywhploTmtZ+frwf8VuTjczBVN+wqcfe3x77I=";
+    hash = "sha256-bvY/ipgVgDzzH0wAqNBdJzCRHZam0WoByRpfde0sJ1c=";
   };
 
   sourceRoot = "${src.name}/checkpoint";
 
   build-system = [ flit-core ];
+
+  pythonRelaxDeps = [
+    "jax"
+  ];
 
   dependencies = [
     absl-py

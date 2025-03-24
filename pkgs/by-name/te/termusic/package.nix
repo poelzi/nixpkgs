@@ -2,7 +2,6 @@
   alsa-lib,
   dbus,
   fetchFromGitHub,
-  fetchpatch,
   glib,
   gst_all_1,
   lib,
@@ -17,13 +16,13 @@
 
 rustPlatform.buildRustPackage rec {
   pname = "termusic";
-  version = "0.9.1";
+  version = "0.10.0";
 
   src = fetchFromGitHub {
     owner = "tramhao";
     repo = "termusic";
     rev = "v${version}";
-    hash = "sha256-aEkg1j6R86QGn21HBimtZwmjmW1K9Wo+67G4DlpY960=";
+    hash = "sha256-Yd23Jk2BFuLtxgF8vgat0wTGq6ahHHBd/HjGI9BY9z4=";
   };
 
   cargoPatches = [
@@ -51,7 +50,7 @@ rustPlatform.buildRustPackage rec {
   '';
 
   useFetchCargoVendor = true;
-  cargoHash = "sha256-LWatmnmLBDf4BFq5RMQBbN4wmptYuz3xqyzz6gJGzX8=";
+  cargoHash = "sha256-1WomL0O5QS2NHu4k6TuA2jLtDKyxlY0iVCgH9pb6CHI=";
 
   useNextest = true;
 
