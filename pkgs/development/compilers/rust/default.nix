@@ -5,6 +5,10 @@
   # Build a reduced compiler (host target only, no docs/rustc-dev). Set for the
   # intermediate links of the mrustc source-bootstrap chain.
   minimal ? false,
+  # Build an upstream-quality optimized compiler (fat LTO + single codegen unit
+  # + jemalloc, plus PGO/BOLT layered in make-rustc-chain.nix). Set for the
+  # *final* link of the mrustc source chain. Mutually exclusive with `minimal`.
+  optimize ? false,
   bootstrapVersion,
   bootstrapHashes,
   selectRustPackage,
@@ -114,7 +118,7 @@ in
         rustc-unwrapped = self.callPackage ./rustc.nix {
           version = rustcVersion;
           sha256 = rustcSha256;
-          inherit enableRustcDev minimal;
+          inherit enableRustcDev minimal optimize;
           inherit
             llvmShared
             llvmSharedForBuild

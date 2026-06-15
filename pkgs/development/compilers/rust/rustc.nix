@@ -33,6 +33,18 @@
   # source chain: host target only, no docs, no rustc-dev. Used by the mrustc
   # bootstrap chain's intermediate links; the final link builds normally.
   minimal ? false,
+  # Build an upstream-quality optimized compiler. When set, the rust side is
+  # built the way upstream's release rustc is: fat LTO, a single codegen unit for
+  # rustc and std, and the jemalloc allocator. (The LLVM-side optimizations
+  # upstream also applies — LLVM PGO/ThinLTO and BOLT on libLLVM — come from a
+  # separately-optimized libLLVM, not from here, because we link an external
+  # shared libLLVM; rustc PGO is added via the profiling phase.) Used for the
+  # *final* link of the mrustc source chain so the source-bootstrapped default
+  # matches upstream's optimization profile. Mutually exclusive with `minimal`.
+  # Much heavier to build, so off by default and never set for the fast
+  # intermediate links. x86_64-unknown-linux-gnu only (the one target upstream
+  # tests rustc LTO on).
+  optimize ? false,
   version,
   sha256,
   patches ? [ ],
@@ -56,6 +68,11 @@ let
     ;
   useLLVM = stdenv.targetPlatform.useLLVM or false;
 in
+assert lib.assertMsg (!(optimize && minimal))
+  "rustc: `optimize` and `minimal` are mutually exclusive (optimize is the full upstream-parity build, minimal is the reduced bootstrap build)";
+assert lib.assertMsg (
+  !optimize || stdenv.hostPlatform.rust.rustcTargetSpec == "x86_64-unknown-linux-gnu"
+) "rustc: `optimize` (rustc fat LTO) is only supported on x86_64-unknown-linux-gnu upstream";
 stdenv.mkDerivation (finalAttrs: {
   pname = "${targetPackages.stdenv.cc.targetPrefix}rustc";
   inherit version;
@@ -98,8 +115,11 @@ stdenv.mkDerivation (finalAttrs: {
     );
 
     RUSTFLAGS = lib.concatStringsSep " " (
-      [
+      lib.optionals (!optimize) [
         # Increase codegen units to introduce parallelism within the compiler.
+        # Skipped for `optimize`, where config.toml's `rust.codegen-units = 1`
+        # must govern so the produced compiler is built as a single, fully
+        # cross-function-inlined codegen unit (as upstream's release builds are).
         "-Ccodegen-units=10"
       ]
       ++ lib.optionals (stdenv.hostPlatform.rust.rustcTargetSpec == "x86_64-unknown-linux-gnu") [
@@ -296,6 +316,24 @@ stdenv.mkDerivation (finalAttrs: {
       # std. Generic functions that do codegen when called in user code obey
       # -Cforce-frame-pointers specified then, if any)
       "--set=rust.frame-pointers"
+    ]
+    ++ optionals optimize [
+      # Build the compiler the way upstream's released rustc is built, so the
+      # source-bootstrapped default isn't slower than the binary one.
+      # https://rustc-dev-guide.rust-lang.org/building/optimized-build.html
+      #
+      # These are the rust-side knobs that take effect with our *external* shared
+      # libLLVM (`--enable-llvm-link-shared`): fat LTO of rustc's own code, a
+      # single codegen unit for rustc and std, and the jemalloc allocator. The
+      # LLVM-side optimizations upstream also applies (LLVM PGO/ThinLTO and BOLT
+      # on libLLVM) live in the libLLVM derivation, not here, because we do not
+      # build LLVM in-tree; they are layered on via a separately-optimized
+      # libLLVM (see make-rustc-chain.nix). rustc PGO is added through the
+      # profiling phase below.
+      "--set=rust.lto=fat"
+      "--set=rust.codegen-units=1"
+      "--set=rust.codegen-units-std=1"
+      "--set=rust.jemalloc=true"
     ];
 
   # if we already have a rust compiler for build just compile the target std
@@ -385,6 +423,76 @@ stdenv.mkDerivation (finalAttrs: {
         --replace 'cargo.env("LZMA_API_STATIC", "1");' ' '
   '';
 
+  # rustc PGO (profile-guided optimization) — upstream's single biggest compiler
+  # speedup. Done as two passes inside this one derivation: build an instrumented
+  # rustc, train it on a representative dependency-free corpus, merge the
+  # profiles, then point config.toml at them so the normal build/install pass
+  # produces a profile-guided + fat-LTO + single-codegen-unit compiler. The
+  # LLVM-side PGO/BOLT upstream also applies is not done here (we link an
+  # external shared libLLVM); it is layered on via an optimized libLLVM.
+  preBuild =
+    if !optimize then
+      null
+    else
+      ''
+            runHook preBuildPgo
+
+            pgoRaw="$NIX_BUILD_TOP/rustc-pgo-raw"
+        mkdir -p "$pgoRaw"
+
+        echo "==> [rustc PGO] pass 1/2: building an instrumented rustc"
+        # Throwaway profiling compiler: instrument, but skip LTO/cgu=1 (pointless and
+        # very slow for a build we discard). `--set` overrides config.toml.
+        python ./x.py build --stage 2 \
+          --set rust.lto=off --set rust.codegen-units=16 \
+          --rust-profile-generate="$pgoRaw" \
+          compiler/rustc library/std
+
+        triple="${stdenv.hostPlatform.rust.rustcTargetSpec}"
+        instr="$PWD/build/$triple/stage2/bin/rustc"
+
+        echo "==> [rustc PGO] generating training corpus"
+        corpus="$NIX_BUILD_TOP/rustc-pgo-corpus"
+        python3 ${./pgo-training-corpus.py} "$corpus"
+
+        echo "==> [rustc PGO] training instrumented rustc on the corpus"
+        n=0
+        for f in "$corpus"/*.rs; do
+          for lvl in 0 2 3; do
+            LLVM_PROFILE_FILE="$pgoRaw/train-$n-%m.profraw" \
+              "$instr" -Copt-level=$lvl --edition 2021 --crate-type lib \
+              --emit=metadata,obj "$f" -o "$NIX_BUILD_TOP/pgo-train-out.o" 2>/dev/null || true
+            n=$((n + 1))
+          done
+        done
+
+        nraw="$(find "$pgoRaw" -name '*.profraw' | wc -l)"
+        echo "==> [rustc PGO] merging $nraw profile shards"
+        if [ "$nraw" -eq 0 ]; then
+          echo "ERROR: rustc PGO training produced no .profraw files" >&2
+          exit 1
+        fi
+        ${lib.getExe' llvmSharedForBuild "llvm-profdata"} merge \
+          -o "$NIX_BUILD_TOP/rustc-pgo.profdata" "$pgoRaw"
+
+        echo "==> [rustc PGO] pass 2/2: enabling profile-use for the optimized build"
+        # Add `profile-use` to the [rust] table. rustc 1.96 names the bootstrap
+        # config `bootstrap.toml` (older versions used `config.toml`).
+        cfg=bootstrap.toml
+        [ -f "$cfg" ] || cfg=config.toml
+        if grep -q '^\[rust\]' "$cfg"; then
+          sed -i '/^\[rust\]/a profile-use = "'"$NIX_BUILD_TOP/rustc-pgo.profdata"'"' "$cfg"
+        else
+          printf '\n[rust]\nprofile-use = "%s"\n' "$NIX_BUILD_TOP/rustc-pgo.profdata" >>"$cfg"
+        fi
+        # Discard the instrumented stage2 so x.py rebuilds an optimized stage2 with
+        # the profile (and the LTO/cgu=1 from configureFlags).
+        rm -rf "build/$triple/stage2" "build/$triple/stage2-std" "build/$triple/stage2-rustc" \
+          "build/$triple/stage2-tools" "build/$triple/stage2-tools-bin" || true
+
+        runHook postBuildPgo
+      '';
+
   # rustc unfortunately needs cmake to compile llvm-rt but doesn't
   # use it for the normal build. This disables cmake in Nix.
   dontUseCmakeConfigure = true;
@@ -409,6 +517,11 @@ stdenv.mkDerivation (finalAttrs: {
   ++ optionals fastCross [
     lndir
     makeWrapper
+  ]
+  ++ optionals optimize [
+    # `llvm-profdata` (to merge the rustc PGO profiles). Ships in the shared
+    # libLLVM's `out/bin`, matching the LLVM version rustc instruments with.
+    llvmSharedForBuild
   ];
 
   buildInputs = [

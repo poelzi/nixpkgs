@@ -45,6 +45,11 @@
   llvmPackages_21,
   cargo-auditable,
   mrustcStage0,
+  # Build the final link as an upstream-quality optimized compiler (fat LTO +
+  # single codegen unit + jemalloc; LLVM PGO/BOLT layered on via an optimized
+  # libLLVM). Off by default — it is a much heavier, multi-hour build — and only
+  # ever applies to the *final* link; the intermediate links stay minimal/fast.
+  optimizeFinal ? false,
 }@args:
 
 let
@@ -68,6 +73,7 @@ let
     "cargo-auditable"
     "pkgsHostTarget"
     "mrustcStage0"
+    "optimizeFinal"
   ];
 
   # rustc.nix reads `targetPlatforms`/`targetPlatformsWithHostTools`/
@@ -155,6 +161,9 @@ let
       # Intermediate links only need to compile the next rustc.
       minimal = !isFinal;
       enableRustcDev = isFinal;
+
+      # Only the final link is built optimized, and only when requested.
+      optimize = isFinal && optimizeFinal;
 
       # Keep the whole chain free of the binary-bootstrapped cargo-auditable.
       cargoAuditable = false;
