@@ -29,21 +29,7 @@
   libffi,
   withBundledLLVM ? false,
   enableRustcDev ? true,
-  # Build a reduced compiler suitable only for bootstrapping the next rustc in a
-  # source chain: host target only, no docs, no rustc-dev. Used by the mrustc
-  # bootstrap chain's intermediate links; the final link builds normally.
   minimal ? false,
-  # Build an upstream-quality optimized compiler. When set, the rust side is
-  # built the way upstream's release rustc is: fat LTO, a single codegen unit for
-  # rustc and std, and the jemalloc allocator. (The LLVM-side optimizations
-  # upstream also applies — LLVM PGO/ThinLTO and BOLT on libLLVM — come from a
-  # separately-optimized libLLVM, not from here, because we link an external
-  # shared libLLVM; rustc PGO is added via the profiling phase.) Used for the
-  # *final* link of the mrustc source chain so the source-bootstrapped default
-  # matches upstream's optimization profile. Mutually exclusive with `minimal`.
-  # Much heavier to build, so off by default and never set for the fast
-  # intermediate links. x86_64-unknown-linux-gnu only (the one target upstream
-  # tests rustc LTO on).
   optimize ? false,
   version,
   sha256,
@@ -117,9 +103,6 @@ stdenv.mkDerivation (finalAttrs: {
     RUSTFLAGS = lib.concatStringsSep " " (
       lib.optionals (!optimize) [
         # Increase codegen units to introduce parallelism within the compiler.
-        # Skipped for `optimize`, where config.toml's `rust.codegen-units = 1`
-        # must govern so the produced compiler is built as a single, fully
-        # cross-function-inlined codegen unit (as upstream's release builds are).
         "-Ccodegen-units=10"
       ]
       ++ lib.optionals (stdenv.hostPlatform.rust.rustcTargetSpec == "x86_64-unknown-linux-gnu") [
@@ -175,7 +158,6 @@ stdenv.mkDerivation (finalAttrs: {
       "--target=${
         concatStringsSep "," (
           # Other targets that don't need any extra dependencies to build.
-          # Skipped for `minimal` chain links, which only need the host target.
           optionals (!fastCross && !minimal) [
             "wasm32-unknown-unknown"
             "wasm32v1-none"
@@ -261,8 +243,6 @@ stdenv.mkDerivation (finalAttrs: {
       "--disable-llvm-bitcode-linker"
     ]
     ++ optionals minimal [
-      # Intermediate chain links only need a working host compiler to
-      # bootstrap the next rustc version; skip docs to save build time.
       "--disable-docs"
     ]
     ++ optionals (!fastCross && stdenv.targetPlatform.config != "wasm32-unknown-none") [
@@ -318,18 +298,7 @@ stdenv.mkDerivation (finalAttrs: {
       "--set=rust.frame-pointers"
     ]
     ++ optionals optimize [
-      # Build the compiler the way upstream's released rustc is built, so the
-      # source-bootstrapped default isn't slower than the binary one.
       # https://rustc-dev-guide.rust-lang.org/building/optimized-build.html
-      #
-      # These are the rust-side knobs that take effect with our *external* shared
-      # libLLVM (`--enable-llvm-link-shared`): fat LTO of rustc's own code, a
-      # single codegen unit for rustc and std, and the jemalloc allocator. The
-      # LLVM-side optimizations upstream also applies (LLVM PGO/ThinLTO and BOLT
-      # on libLLVM) live in the libLLVM derivation, not here, because we do not
-      # build LLVM in-tree; they are layered on via a separately-optimized
-      # libLLVM (see make-rustc-chain.nix). rustc PGO is added through the
-      # profiling phase below.
       "--set=rust.lto=fat"
       "--set=rust.codegen-units=1"
       "--set=rust.codegen-units-std=1"
@@ -423,13 +392,7 @@ stdenv.mkDerivation (finalAttrs: {
         --replace 'cargo.env("LZMA_API_STATIC", "1");' ' '
   '';
 
-  # rustc PGO (profile-guided optimization) — upstream's single biggest compiler
-  # speedup. Done as two passes inside this one derivation: build an instrumented
-  # rustc, train it on a representative dependency-free corpus, merge the
-  # profiles, then point config.toml at them so the normal build/install pass
-  # produces a profile-guided + fat-LTO + single-codegen-unit compiler. The
-  # LLVM-side PGO/BOLT upstream also applies is not done here (we link an
-  # external shared libLLVM); it is layered on via an optimized libLLVM.
+  # Train an instrumented compiler before the optimized build.
   preBuild =
     if !optimize then
       null
@@ -441,8 +404,6 @@ stdenv.mkDerivation (finalAttrs: {
         mkdir -p "$pgoRaw"
 
         echo "==> [rustc PGO] pass 1/2: building an instrumented rustc"
-        # Throwaway profiling compiler: instrument, but skip LTO/cgu=1 (pointless and
-        # very slow for a build we discard). `--set` overrides config.toml.
         python ./x.py build --stage 2 \
           --set rust.lto=off --set rust.codegen-units=16 \
           --rust-profile-generate="$pgoRaw" \
@@ -476,8 +437,6 @@ stdenv.mkDerivation (finalAttrs: {
           -o "$NIX_BUILD_TOP/rustc-pgo.profdata" "$pgoRaw"
 
         echo "==> [rustc PGO] pass 2/2: enabling profile-use for the optimized build"
-        # Add `profile-use` to the [rust] table. rustc 1.96 names the bootstrap
-        # config `bootstrap.toml` (older versions used `config.toml`).
         cfg=bootstrap.toml
         [ -f "$cfg" ] || cfg=config.toml
         if grep -q '^\[rust\]' "$cfg"; then
@@ -485,8 +444,6 @@ stdenv.mkDerivation (finalAttrs: {
         else
           printf '\n[rust]\nprofile-use = "%s"\n' "$NIX_BUILD_TOP/rustc-pgo.profdata" >>"$cfg"
         fi
-        # Discard the instrumented stage2 so x.py rebuilds an optimized stage2 with
-        # the profile (and the LTO/cgu=1 from configureFlags).
         rm -rf "build/$triple/stage2" "build/$triple/stage2-std" "build/$triple/stage2-rustc" \
           "build/$triple/stage2-tools" "build/$triple/stage2-tools-bin" || true
 
@@ -519,8 +476,6 @@ stdenv.mkDerivation (finalAttrs: {
     makeWrapper
   ]
   ++ optionals optimize [
-    # `llvm-profdata` (to merge the rustc PGO profiles). Ships in the shared
-    # libLLVM's `out/bin`, matching the LLVM version rustc instruments with.
     llvmSharedForBuild
   ];
 
@@ -543,8 +498,6 @@ stdenv.mkDerivation (finalAttrs: {
 
   postInstall =
     lib.optionalString minimal ''
-      # `minimal` links build with --disable-docs; make sure the doc/man
-      # outputs still exist so Nix does not error on missing outputs.
       mkdir -p $doc $man
     ''
     + lib.optionalString (enableRustcDev && !fastCross && !minimal) ''
@@ -603,8 +556,6 @@ stdenv.mkDerivation (finalAttrs: {
       lib.licenses.mit
       lib.licenses.asl20
     ];
-    # The bootstrap compiler may run on fewer platforms than the rustc it can
-    # target, e.g. the mrustc source bootstrap chain is x86_64-linux-only.
     platforms = rustc.meta.platforms or rustc.targetPlatformsWithHostTools;
     # If rustc can't target a platform, we also can't build rustc for
     # that platform.

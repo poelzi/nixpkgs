@@ -4060,9 +4060,6 @@ with pkgs;
   wrapRustc = rustc-unwrapped: wrapRustcWith { inherit rustc-unwrapped; };
 
   rust_1_97 = callPackage ../development/compilers/rust/1_97.nix { };
-  # On x86_64-linux the default `rust` is the fully source-bootstrapped chain
-  # below (`rustcBootstrapChain.final`). mrustc only bootstraps x86_64-linux, so
-  # every other platform keeps the binary-bootstrapped `rust_1_97`.
   rust =
     if stdenv.hostPlatform.system == "x86_64-linux" then rustcBootstrapChain.final else rust_1_97;
 
@@ -4070,9 +4067,6 @@ with pkgs;
   mrustc-minicargo = callPackage ../development/compilers/mrustc/minicargo.nix { };
   mrustc-bootstrap = callPackage ../development/compilers/mrustc/bootstrap.nix { };
 
-  # Full-source Rust bootstrap chain: mrustc -> rustc 1.90.0 -> ... -> 1.96.0.
-  # On x86_64-linux this is the default `rust`/`rustPackages` (wired above and
-  # below); `rust_1_96` stays available as the binary-bootstrapped variant.
   rustcBootstrapChain = callPackage ../development/compilers/rust/make-rustc-chain.nix {
     mrustcStage0 = {
       rustc = mrustc-bootstrap;

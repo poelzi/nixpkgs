@@ -1,11 +1,5 @@
 #!/usr/bin/env python3
-# Generates a small, dependency-free Rust corpus used to train rustc's PGO
-# instrumentation (see rustc.nix's `optimize` preBuild). It is deliberately
-# diverse — generics/monomorphization, trait dispatch, closures/iterators, large
-# match/enum lowering, recursion and macro expansion — so the merged profile
-# covers the compiler's common hot paths. It is NOT upstream's rustc-perf suite,
-# so the PGO win is smaller than a release build's; it is the sandbox-safe,
-# vendoring-free approximation. Usage: pgo-training-corpus.py <out-dir>
+# Generate a dependency-free rustc PGO training corpus.
 import os
 import sys
 
@@ -19,7 +13,6 @@ def write(name, body):
         f.write(body)
 
 
-# 1) Generics + monomorphization + iterator/closure chains.
 generics = ["use std::collections::HashMap;\n"]
 for i in range(120):
     generics.append(f"""
@@ -40,7 +33,6 @@ generics.append("    t\n}\n")
 write("generics.rs", "\n".join(generics))
 
 
-# 2) Trait objects + dynamic dispatch + enums + a big match.
 traits = ["pub trait Shape { fn area(&self) -> f64; fn name(&self) -> &'static str; }\n"]
 for i in range(60):
     traits.append(f"""
@@ -76,7 +68,6 @@ traits.append("    acc + n as f64\n}\n")
 write("traits.rs", "\n".join(traits))
 
 
-# 3) Macros + recursion + nested generic data structures.
 macros = ["""
 macro_rules! tuple_sum {
     ($($x:expr),*) => { 0i64 $(+ $x as i64)* };

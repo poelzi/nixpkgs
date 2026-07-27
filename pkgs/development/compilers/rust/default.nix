@@ -2,24 +2,13 @@
   rustcVersion,
   rustcSha256,
   enableRustcDev ? true,
-  # Build a reduced compiler (host target only, no docs/rustc-dev). Set for the
-  # intermediate links of the mrustc source-bootstrap chain.
   minimal ? false,
-  # Build an upstream-quality optimized compiler (fat LTO + single codegen unit
-  # + jemalloc, plus PGO/BOLT layered in make-rustc-chain.nix). Set for the
-  # *final* link of the mrustc source chain. Mutually exclusive with `minimal`.
   optimize ? false,
   bootstrapVersion,
   bootstrapHashes,
   selectRustPackage,
   rustcPatches ? [ ],
-  # When non-null, bootstrap this rustc from the given { rustc; cargo; } set (the
-  # previous link in the mrustc source chain) instead of the prebuilt binary
-  # download in `packages.prebuilt`. Only `rustc` and `cargo` are required.
   bootstrapPackagesOverride ? null,
-  # When non-null, forces cargo's `auditable` flag (the mrustc chain sets it
-  # false). null keeps cargo.nix's default. Avoids pulling the binary-bootstrapped
-  # cargo-auditable into the source-chain closure.
   cargoAuditable ? null,
   llvmShared,
   llvmSharedForBuild,
@@ -96,9 +85,6 @@ in
           if fastCross then
             pkgsBuildBuild.rustPackages
           else if bootstrapPackagesOverride != null then
-            # Source-bootstrap chain link: bootstrap from the previous link's
-            # compiler (or, for the base link, an mrustc-built rustc+cargo)
-            # instead of the prebuilt binary download.
             self.buildRustPackages.overrideScope (
               _: _: lib.optionalAttrs (stdenv.buildPlatform == stdenv.hostPlatform) bootstrapPackagesOverride
             )
@@ -130,7 +116,6 @@ in
 
           patches = rustcPatches;
 
-          # Use boot package set to break cycle
           inherit (bootstrapRustPackages) cargo rustc rustfmt;
         };
         rustc = wrapRustcWith {
@@ -147,10 +132,6 @@ in
                 # Use boot package set to break cycle
                 rustPlatform = bootRustPlatform;
               }
-              # The default cargo-auditable is built with the binary-bootstrapped
-              # rustc; the mrustc source chain disables auditable to keep its
-              # closure free of any prebuilt rust binary. `null` keeps cargo.nix's
-              # own default (auditable iff cargo-auditable is not broken).
               // lib.optionalAttrs (cargoAuditable != null) { auditable = cargoAuditable; }
             )
           else
